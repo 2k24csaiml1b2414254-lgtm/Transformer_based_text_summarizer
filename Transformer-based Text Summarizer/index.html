@@ -1,0 +1,281 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Summarize long text using a T5 Transformer model.">
+    <title>Text Summarizer | T5 Transformer</title>
+
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 24px;
+            min-height: 100vh;
+            background: #fff7ed;
+            color: #333;
+        }
+
+        .container {
+            max-width: 760px;
+            margin: 35px auto;
+            padding: 28px;
+            background: #fff;
+            border-radius: 14px;
+            box-shadow: 0 4px 18px rgba(0, 0, 0, 0.08);
+        }
+
+        h1 {
+            margin-bottom: 8px;
+            text-align: center;
+            color: #f97316;
+        }
+
+        .subtitle {
+            margin-bottom: 28px;
+            text-align: center;
+            color: #666;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 10px;
+            font-weight: bold;
+        }
+
+        textarea {
+            width: 100%;
+            min-height: 220px;
+            resize: vertical;
+            padding: 14px;
+            border: 1px solid #d6d3d1;
+            border-radius: 8px;
+            font: inherit;
+            line-height: 1.5;
+        }
+
+        textarea:focus {
+            outline: 2px solid #fdba74;
+            border-color: #f97316;
+        }
+
+        .meta {
+            margin: 8px 0 18px;
+            text-align: right;
+            font-size: 13px;
+            color: #78716c;
+        }
+
+        button {
+            padding: 12px 18px;
+            border: none;
+            border-radius: 8px;
+            background: #f97316;
+            color: white;
+            font-size: 15px;
+            font-weight: bold;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background: #ea580c;
+        }
+
+        button:disabled {
+            cursor: not-allowed;
+            opacity: 0.6;
+        }
+
+        .actions {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .secondary {
+            background: #57534e;
+        }
+
+        .secondary:hover {
+            background: #44403c;
+        }
+
+        .result {
+            margin-top: 26px;
+            padding: 18px;
+            border: 1px solid #fed7aa;
+            border-radius: 10px;
+            background: #fff7ed;
+        }
+
+        .result h2 {
+            margin-top: 0;
+            font-size: 19px;
+        }
+
+        #summary-text {
+            line-height: 1.7;
+            white-space: pre-wrap;
+            overflow-wrap: anywhere;
+        }
+
+        .status {
+            margin: 14px 0 0;
+            color: #57534e;
+            font-size: 14px;
+        }
+
+        .error {
+            color: #b91c1c;
+        }
+
+        [hidden] {
+            display: none !important;
+        }
+
+        @media (max-width: 600px) {
+            body {
+                padding: 12px;
+            }
+
+            .container {
+                margin: 12px auto;
+                padding: 18px;
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main class="container">
+        <h1>Text Summarizer</h1>
+        <p class="subtitle">Powered by a Hugging Face T5 Transformer</p>
+
+        <form id="summarization-form">
+            <label for="dialogue-input">Your text</label>
+
+            <textarea
+                id="dialogue-input"
+                placeholder="Paste an article, notes, or other text here..."
+                maxlength="20000"
+                required
+            ></textarea>
+
+            <div class="meta">
+                <span id="character-count">0</span>/20000 characters
+            </div>
+
+            <div class="actions">
+                <button id="summarize-button" type="submit">
+                    Summarize Text
+                </button>
+
+                <button id="clear-button" class="secondary" type="button">
+                    Clear
+                </button>
+            </div>
+        </form>
+
+        <p id="status" class="status" role="status" aria-live="polite"></p>
+
+        <section id="summary-output" class="result" hidden>
+            <h2>Generated Summary</h2>
+            <p id="summary-text"></p>
+
+            <button id="copy-button" class="secondary" type="button">
+                Copy Summary
+            </button>
+        </section>
+    </main>
+
+    <script>
+        const form = document.getElementById("summarization-form");
+        const input = document.getElementById("dialogue-input");
+        const count = document.getElementById("character-count");
+        const button = document.getElementById("summarize-button");
+        const clearButton = document.getElementById("clear-button");
+        const copyButton = document.getElementById("copy-button");
+        const status = document.getElementById("status");
+        const output = document.getElementById("summary-output");
+        const summaryText = document.getElementById("summary-text");
+
+        input.addEventListener("input", () => {
+            count.textContent = input.value.length;
+        });
+
+        form.addEventListener("submit", async (event) => {
+            event.preventDefault();
+
+            const dialogue = input.value.trim();
+
+            if (!dialogue) {
+                status.textContent = "Please enter some text first.";
+                status.classList.add("error");
+                return;
+            }
+
+            button.disabled = true;
+            button.textContent = "Summarizing...";
+            status.classList.remove("error");
+            status.textContent = "Generating your summary. Please wait...";
+            output.hidden = true;
+
+            try {
+                const response = await fetch("/summarize/", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json"
+                    },
+                    body: JSON.stringify({ dialogue })
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    throw new Error(
+                        data.detail || `Request failed (${response.status})`
+                    );
+                }
+
+                summaryText.textContent = data.summary || "No summary returned.";
+                output.hidden = false;
+                status.textContent = "Summary generated successfully.";
+            } catch (error) {
+                status.textContent =
+                    error.message || "Something went wrong. Please try again.";
+                status.classList.add("error");
+            } finally {
+                button.disabled = false;
+                button.textContent = "Summarize Text";
+            }
+        });
+
+        clearButton.addEventListener("click", () => {
+            input.value = "";
+            count.textContent = "0";
+            summaryText.textContent = "";
+            output.hidden = true;
+            status.textContent = "";
+            status.classList.remove("error");
+            input.focus();
+        });
+
+        copyButton.addEventListener("click", async () => {
+            try {
+                await navigator.clipboard.writeText(summaryText.textContent);
+                status.textContent = "Summary copied to clipboard.";
+                status.classList.remove("error");
+            } catch {
+                status.textContent =
+                    "Copy failed. Please select and copy the summary manually.";
+                status.classList.add("error");
+            }
+        });
+    </script>
+</body>
+</html>
